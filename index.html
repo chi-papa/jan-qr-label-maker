@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JAN & 多機能QR ラベルメーカー（A4レイアウト・完全オフライン対応）</title>
+<style>
+  :root {
+    --bg-main: #f4f2ec;
+    --bg-panel: #fbfaf6;
+    --border-color: #dcd8cc;
+    --text-main: #2c2b29;
+    --text-sub: #6b6860;
+    --accent: #2f5d62;
+    --accent-hover: #23474b;
+    --danger: #b83b3b;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: "Meiryo", "Hiragino Kaku Gothic ProN", sans-serif;
+    background-color: var(--bg-main);
+    color: var(--text-main);
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* 左側操作パネル */
+  .sidebar {
+    width: 400px;
+    background: var(--bg-panel);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    padding: 16px;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+
+  .app-title {
+    font-size: 15px;
+    font-weight: bold;
+    color: var(--accent);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .app-sub {
+    font-size: 11px;
+    color: var(--text-sub);
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .section-title {
+    font-size: 12px;
+    font-weight: bold;
+    color: var(--text-main);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .card {
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 12px;
+  }
+
+  .form-group {
+    margin-bottom: 8px;
+  }
+
+  .form-group label {
+    display: block;
+    font-size: 11px;
+    color: var(--text-sub);
+    margin-bottom: 3px;
+  }
+
+  input[type="text"], textarea, select {
+    width: 100%;
+    padding: 7px 9px;
+    border: 1px solid #ccc8bc;
+    border-radius: 4px;
+    font-size: 12px;
+    background: #fff;
+    color: var(--text-main);
+    font-family: inherit;
+  }
+
+  input[type="text"]:focus, textarea:focus, select:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  textarea {
+    resize: vertical;
+    min-height: 55px;
+    line-height: 1.4;
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+  }
+
+  button {
+    cursor: pointer;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: bold;
+    font-family: inherit;
+    transition: background 0.15s;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    flex: 1;
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+
+  .btn-secondary {
+    background: #e6e2d6;
+    color: var(--text-main);
+  }
+  .btn-secondary:hover { background: #d8d3c4; }
+
+  .btn-print {
+    background: #1f4e5f;
+    color: #fff;
+    width: 100%;
+    padding: 11px;
+    font-size: 13px;
+    margin-top: 2px;
+  }
+  .btn-print:hover { background: #163a47; }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .error-msg {
+    color: var(--danger);
+    font-size: 11px;
+    margin-top: 4px;
+    min-height: 14px;
+  }
+
+  /* 登録済みリスト */
+  .item-list {
+    max-height: 140px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: #fff;
+  }
+
+  .item-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    border-bottom: 1px solid #eeeae0;
+    font-size: 11px;
+    gap: 6px;
+  }
+  .item-row:last-child { border-bottom: none; }
+
+  .item-info {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+  }
+
+  .item-code {
+    font-family: monospace;
+    font-weight: bold;
+    color: var(--accent);
+    margin-right: 4px;
+  }
+
+  .btn-del {
+    background: transparent;
+    color: #999;
+    padding: 2px 6px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .btn-del:hover { color: var(--danger); }
+
+  /* 右側 A4プレビュー領域 */
+  .preview-area {
+    flex: 1;
+    overflow: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+
+  /* A4用紙サイズ (210mm x 297mm) */
+  .a4-page {
+    width: 210mm;
+    min-height: 297mm;
+    background: #ffffff;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    padding: 12mm;
+    display: grid;
+    align-content: start;
+    gap: 4mm;
+    position: relative;
+  }
+
+  .a4-page.cols-2 { grid-template-columns: repeat(2, 1fr); }
+  .a4-page.cols-3 { grid-template-columns: repeat(3, 1fr); }
+  .a4-page.cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+  .label-card {
+    border: 1px dashed #bbbbbb;
+    border-radius: 3px;
+    padding: 3mm 3.5mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    background: #fff;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .a4-page.no-border .label-card {
+    border: 1px solid transparent;
+  }
+
+  .label-name {
+    font-size: 10.5pt;
+    font-weight: bold;
+    color: #000;
+    line-height: 1.25;
+    margin-bottom: 2mm;
+    word-break: break-all;
+    border-bottom: 1px solid #e0e0e0;
+    padding-bottom: 1.2mm;
+  }
+
+  .cols-3 .label-name { font-size: 9pt; }
+  .cols-4 .label-name { font-size: 8pt; }
+
+  .codes-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    gap: 2mm;
+  }
+
+  .code-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+  }
+
+  .code-box canvas {
+    max-width: 100%;
+    height: auto;
+    image-rendering: pixelated;
+  }
+
+  /* 印刷用スタイル */
+  @media print {
+    @page {
+      size: A4 portrait;
+      margin: 0;
+    }
+    body {
+      background: #fff;
+      height: auto;
+      overflow: visible;
+      display: block;
+    }
+    .sidebar {
+      display: none !important;
+    }
+    .preview-area {
+      padding: 0;
+      overflow: visible;
+      display: block;
+    }
+    .a4-page {
+      box-shadow: none;
+      margin: 0;
+      width: 210mm;
+      min-height: 297mm;
+      page-break-after: always;
+    }
+    .a4-page:last-child {
+      page-break-after: auto;
+    }
+  }
+</style>
+</head>
+<body>
+
+  <!-- 左側操作パネル -->
+  <aside class="sidebar">
+    <div class="app-title">
+      <span>JAN & 多機能QR ラベル作成</span>
+      <span style="font-size:10px; background:#e6e2d6; padding:2px 5px; border-radius:3px;">完全オフライン</span>
+    </div>
+    <div class="app-sub">JANバーコードとURL・テキスト対応QRコードをA4レイアウト</div>
+
+    <!-- 1件追加 -->
+    <div class="card">
+      <div class="section-title">1件ずつ追加</div>
+      <div class="form-group">
+        <label>コード種別</label>
+        <select id="inputType">
+          <option value="jan">JANコード (13桁/8桁)</option>
+          <option value="url">URL (ウェブサイト・SNS)</option>
+          <option value="text">自由テキスト・連絡先など</option>
+        </select>
+      </div>
+      <div class="form-group" id="groupCode">
+        <label id="lblCodeInput">JANコード (13桁または8桁)</label>
+        <input type="text" id="inputCode" placeholder="例: 4901234567894" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label id="lblNameInput">ラベル名 / 商品名・肩書など</label>
+        <input type="text" id="inputName" placeholder="例: シンセイ ロックシート 1m×50m" autocomplete="off">
+      </div>
+      <div class="btn-row">
+        <button class="btn-primary" id="btnAdd">＋ ラベルに追加</button>
+      </div>
+      <div class="error-msg" id="errorMsg"></div>
+    </div>
+
+    <!-- 一括貼り付け -->
+    <div class="card">
+      <div class="section-title">
+        <span>一括追加（Tab/カンマ区切り）</span>
+      </div>
+      <div class="form-group">
+        <textarea id="bulkInput" placeholder="4901234567894&#9;商品名A&#10;https://example.com&#9;公式サイト"></textarea>
+      </div>
+      <button class="btn-secondary" style="width:100%;" id="btnBulkAdd">まとめてリストに追加</button>
+    </div>
+
+    <!-- A4レイアウト設定 -->
+    <div class="card">
+      <div class="section-title">A4レイアウト設定</div>
+      <div class="grid-2 form-group">
+        <div>
+          <label>横の列数</label>
+          <select id="optCols">
+            <option value="2">2列（大きめ）</option>
+            <option value="3" selected>3列（標準ラベル）</option>
+            <option value="4">4列（名刺・コンパクト）</option>
+          </select>
+        </div>
+        <div>
+          <label>枠線（切り取り線）</label>
+          <select id="optBorder">
+            <option value="dashed" selected>点線あり</option>
+            <option value="none">枠線なし</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- 登録リスト管理 -->
+    <div class="card" style="flex:1; display:flex; flex-direction:column;">
+      <div class="section-title">
+        <span>登録済み (<span id="itemCount">0</span>件)</span>
+        <button class="btn-del" id="btnClearAll" style="font-size:11px; color:var(--danger); background:none; border:none; cursor:pointer;">全削除</button>
+      </div>
+      <div class="item-list" id="itemList"></div>
+    </div>
+
+    <button class="btn-print" onclick="window.print()">🖨️ A4サイズで印刷 / PDF保存</button>
+  </aside>
+
+  <!-- 右側 A4プレビュー -->
+  <main class="preview-area" id="previewArea"></main>
+
+<script>
+/**
+ * ============================================================================
+ * 1. JANコード (EAN-13 / EAN-8) エンコーダ
+ * ============================================================================
+ */
+const JANEncoder = (() => {
+  const EAN13_PARITY = ["LLLLLL", "LLGLGG", "LLGGLG", "LLGGGL", "LGLLGG", "LGGLLG", "LGGGLL", "LGLGLG", "LGLGGL", "LGGLGL"];
+  const CODE_L = ["0001101", "0011001", "0010011", "0111101", "0100011", "0110001", "0101111", "0111011", "0110111", "0001011"];
+  const CODE_G = ["0100111", "0110011", "0011011", "0100001", "0011101", "0111001", "0000101", "0010001", "0001001", "0010111"];
+  const CODE_R = ["1110010", "1100110", "1101100", "1000010", "1011100", "1001110", "1010000", "1000100", "1001000", "1110100"];
+
+  function calcCheckDigit(digits) {
+    let sum = 0;
+    const len = digits.length;
+    for (let i = 0; i < len; i++) {
+      const n = parseInt(digits[len - 1 - i], 10);
+      sum += (i % 2 === 0) ? n * 3 : n;
+    }
+    return (10 - (sum % 10)) % 10;
+  }
+
+  function normalizeAndValidate(raw) {
+    const clean = raw.replace(/[^0-9]/g, "");
+    if (clean.length === 12 || clean.length === 7) {
+      return { valid: true, code: clean + calcCheckDigit(clean) };
+    }
+    if (clean.length === 13 || clean.length === 8) {
+      return { valid: true, code: clean };
+    }
+    return { valid: false, error: "JANコードは13桁または8桁で入力してください" };
+  }
+
+  function drawToCanvas(canvas, code, scale = 2, height = 48) {
+    let bits = "101";
+    if (code.length === 13) {
+      const first = parseInt(code[0], 10);
+      const parity = EAN13_PARITY[first];
+      for (let i = 1; i <= 6; i++) {
+        const d = parseInt(code[i], 10);
+        bits += (parity[i - 1] === "L") ? CODE_L[d] : CODE_G[d];
+      }
+      bits += "01010";
+      for (let i = 7; i <= 12; i++) bits += CODE_R[parseInt(code[i], 10)];
+    } else {
+      for (let i = 0; i < 4; i++) bits += CODE_L[parseInt(code[i], 10)];
+      bits += "01010";
+      for (let i = 4; i < 8; i++) bits += CODE_R[parseInt(code[i], 10)];
+    }
+    bits += "101";
+
+    const quietZone = 8 * scale;
+    const width = bits.length * scale + quietZone * 2;
+    const textHeight = 14;
+    canvas.width = width;
+    canvas.height = height + textHeight;
+
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = "#000000";
+    for (let i = 0; i < bits.length; i++) {
+      if (bits[i] === "1") {
+        let isGuard = false;
+        if (code.length === 13) {
+          isGuard = (i < 3) || (i >= 45 && i < 50) || (i >= 92);
+        } else {
+          isGuard = (i < 3) || (i >= 31 && i < 36) || (i >= 64);
+        }
+        ctx.fillRect(quietZone + i * scale, 2, scale, isGuard ? height + 4 : height);
+      }
+    }
+
+    ctx.font = "bold 11px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    if (code.length === 13) {
+      ctx.fillText(code[0], quietZone - 5, height + textHeight);
+      ctx.fillText(code.slice(1, 7), quietZone + 24 * scale, height + textHeight);
+      ctx.fillText(code.slice(7, 13), quietZone + 71 * scale, height + textHeight);
+    } else {
+      ctx.fillText(code.slice(0, 4), quietZone + 17 * scale, height + textHeight);
+      ctx.fillText(code.slice(4, 8), quietZone + 50 * scale, height + textHeight);
+    }
+  }
+
+  return { normalizeAndValidate, drawToCanvas };
+})();
+
+/**
+ * ============================================================================
+ * 2. QRコード生成エンジン (Ver 1〜6 / ECC-M)
+ * ============================================================================
+ */
+const QREncoder = (() => {
+  const EXP = new Uint8Array(512);
+  const LOG = new Uint8Array(256);
+  let x = 1;
+  for (let i = 0; i < 255; i++) {
+    EXP[i] = x;
+    LOG[x] = i;
+    x <<= 1;
+    if (x & 0x100) x ^= 0x11d;
+  }
+  for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255];
+
+  function gfMul(a, b) {
+    if (a === 0 || b === 0) return 0;
+    return EXP[LOG[a] + LOG[b]];
+  }
+
+  function rsGeneratorPoly(deg) {
+    let poly = [1];
+    for (let i = 0; i < deg; i++) {
+      const next = new Array(poly.length + 1).fill(0);
+      for (let j = 0; j < poly.length; j++) {
+        next[j] ^= poly[j];
+        next[j + 1] ^= gfMul(poly[j], EXP[i]);
+      }
+      poly = next;
+    }
+    return poly;
+  }
+
+  function rsCompute(data, ecLen) {
+    const gen = rsGeneratorPoly(ecLen);
+    const res = new Array(ecLen).fill(0);
+    for (let i = 0; i < data.length; i++) {
+      const factor = data[i] ^ res[0];
+      res.shift();
+      res.push(0);
+      for (let j = 0; j < ecLen; j++) res[j] ^= gfMul(gen[j + 1], factor);
+    }
+    return res;
+  }
+
+  const VERSION_SPECS = [
+    null,
+    [1, 21, 16, 10, 1, []],
+    [2, 25, 28, 16, 1, [6, 18]],
+    [3, 29, 44, 26, 1, [6, 22]],
+    [4, 33, 64, 18, 2, [6, 26]],
+    [5, 37, 86, 24, 2, [6, 30]],
+    [6, 41, 108, 16, 4, [6, 34]]
+  ];
+
+  function createMatrix(text) {
+    const bytes = Array.from(new TextEncoder().encode(text));
+    let spec = null;
+    for (let v = 1; v <= 6; v++) {
+      if (bytes.length + 2 <= VERSION_SPECS[v][2]) {
+        spec = VERSION_SPECS[v];
+        break;
+      }
+    }
+    if (!spec) {
+      bytes.length = 104;
+      spec = VERSION_SPECS[6];
+    }
+
+    const [ver, size, dataCap, ecPerBlock, numBlocks, alignCoords] = spec;
+    const bits = [];
+    const pushBits = (val, len) => {
+      for (let i = len - 1; i >= 0; i--) bits.push((val >> i) & 1);
+    };
+
+    pushBits(0b0100, 4);
+    pushBits(bytes.length, 8);
+    for (const b of bytes) pushBits(b, 8);
+
+    const maxBits = dataCap * 8;
+    const termLen = Math.min(4, maxBits - bits.length);
+    pushBits(0, termLen);
+    while (bits.length % 8 !== 0) bits.push(0);
+
+    const dataCodewords = [];
+    for (let i = 0; i < bits.length; i += 8) {
+      let byte = 0;
+      for (let j = 0; j < 8; j++) byte = (byte << 1) | bits[i + j];
+      dataCodewords.push(byte);
+    }
+
+    const padBytes = [0xec, 0x11];
+    let padIdx = 0;
+    while (dataCodewords.length < dataCap) {
+      dataCodewords.push(padBytes[padIdx % 2]);
+      padIdx++;
+    }
+
+    const blockSize = Math.floor(dataCap / numBlocks);
+    const dataBlocks = [];
+    const ecBlocks = [];
+    let offset = 0;
+    for (let b = 0; b < numBlocks; b++) {
+      const blk = dataCodewords.slice(offset, offset + blockSize);
+      offset += blockSize;
+      dataBlocks.push(blk);
+      ecBlocks.push(rsCompute(blk, ecPerBlock));
+    }
+
+    const finalCodewords = [];
+    for (let i = 0; i < blockSize; i++) {
+      for (let b = 0; b < numBlocks; b++) finalCodewords.push(dataBlocks[b][i]);
+    }
+    for (let i = 0; i < ecPerBlock; i++) {
+      for (let b = 0; b < numBlocks; b++) finalCodewords.push(ecBlocks[b][i]);
+    }
+
+    const mat = Array.from({ length: size }, () => new Array(size).fill(null));
+    const isFunc = Array.from({ length: size }, () => new Array(size).fill(false));
+
+    function setFunc(r, c, val) {
+      if (r >= 0 && r < size && c >= 0 && c < size) {
+        mat[r][c] = val ? 1 : 0;
+        isFunc[r][c] = true;
+      }
+    }
+
+    function placeFinder(r, c) {
+      for (let dr = -1; dr <= 7; dr++) {
+        for (let dc = -1; dc <= 7; dc++) {
+          const inOuter = (dr >= 0 && dr <= 6 && dc >= 0 && dc <= 6);
+          const isBlack = inOuter && (dr === 0 || dr === 6 || dc === 0 || dc === 6 || (dr >= 2 && dr <= 4 && dc >= 2 && dc <= 4));
+          setFunc(r + dr, c + dc, isBlack);
+        }
+      }
+    }
+    placeFinder(0, 0);
+    placeFinder(0, size - 7);
+    placeFinder(size - 7, 0);
+
+    if (alignCoords.length > 0) {
+      for (const r of alignCoords) {
+        for (const c of alignCoords) {
+          if (isFunc[r][c]) continue;
+          for (let dr = -2; dr <= 2; dr++) {
+            for (let dc = -2; dc <= 2; dc++) {
+              setFunc(r + dr, c + dc, Math.abs(dr) === 2 || Math.abs(dc) === 2 || (dr === 0 && dc === 0));
+            }
+          }
+        }
+      }
+    }
+
+    for (let i = 8; i < size - 8; i++) {
+      if (!isFunc[6][i]) setFunc(6, i, i % 2 === 0);
+      if (!isFunc[i][6]) setFunc(i, 6, i % 2 === 0);
+    }
+
+    for (let i = 0; i <= 8; i++) {
+      if (!isFunc[8][i]) setFunc(8, i, 0);
+      if (!isFunc[i][8]) setFunc(i, 8, 0);
+    }
+    for (let i = 0; i < 8; i++) {
+      setFunc(8, size - 1 - i, 0);
+      if (i < 7) setFunc(size - 1 - i, 8, 0);
+    }
+    setFunc(size - 8, 8, 1);
+
+    const allBits = [];
+    for (const cw of finalCodewords) {
+      for (let i = 7; i >= 0; i--) allBits.push((cw >> i) & 1);
+    }
+
+    let bitIdx = 0;
+    let upward = true;
+    for (let col = size - 1; col >= 1; col -= 2) {
+      if (col === 6) col--;
+      for (let step = 0; step < size; step++) {
+        const row = upward ? (size - 1 - step) : step;
+        for (let dx = 0; dx < 2; dx++) {
+          const c = col - dx;
+          if (!isFunc[row][c]) {
+            let bit = bitIdx < allBits.length ? allBits[bitIdx++] : 0;
+            if ((row + c) % 2 === 0) bit ^= 1;
+            mat[row][c] = bit;
+          }
+        }
+      }
+      upward = !upward;
+    }
+
+    const fmtBits = [1,0,1,0,1,0,0,0,0,0,1,0,0,1,0];
+    for (let i = 0; i <= 5; i++) mat[8][i] = fmtBits[i];
+    mat[8][7] = fmtBits[6];
+    mat[8][8] = fmtBits[7];
+    mat[7][8] = fmtBits[8];
+    for (let i = 9; i <= 14; i++) mat[14 - i][8] = fmtBits[i];
+    for (let i = 0; i <= 7; i++) mat[8][size - 1 - i] = fmtBits[14 - i];
+    for (let i = 0; i <= 6; i++) mat[size - 7 + i][8] = fmtBits[6 - i];
+
+    return mat;
+  }
+
+  function drawToCanvas(canvas, text, scale = 3) {
+    const mat = createMatrix(text);
+    const size = mat.length;
+    const margin = 2;
+    const total = (size + margin * 2) * scale;
+    canvas.width = total;
+    canvas.height = total;
+
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, total, total);
+
+    ctx.fillStyle = "#000000";
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        if (mat[r][c] === 1) {
+          ctx.fillRect((c + margin) * scale, (r + margin) * scale, scale, scale);
+        }
+      }
+    }
+  }
+
+  return { drawToCanvas };
+})();
+
+/**
+ * ============================================================================
+ * 3. 状態管理 & レンダリング
+ * ============================================================================
+ */
+let items = [
+  { type: "jan", code: "4901234567894", name: "サンプル商品（JAN）" },
+  { type: "url", code: "https://example.com", name: "サンプルサイト（QR）" }
+];
+
+const elInputType = document.getElementById("inputType");
+const elInputCode = document.getElementById("inputCode");
+const elInputName = document.getElementById("inputName");
+const elLblCodeInput = document.getElementById("lblCodeInput");
+const elErrorMsg = document.getElementById("errorMsg");
+const elBulkInput = document.getElementById("bulkInput");
+const elItemList = document.getElementById("itemList");
+const elItemCount = document.getElementById("itemCount");
+const elPreviewArea = document.getElementById("previewArea");
+
+const optCols = document.getElementById("optCols");
+const optBorder = document.getElementById("optBorder");
+
+function toggleInputMode() {
+  const t = elInputType.value;
+  if (t === "jan") {
+    elLblCodeInput.textContent = "JANコード (13桁または8桁)";
+    elInputCode.placeholder = "例: 4901234567894";
+  } else if (t === "url") {
+    elLblCodeInput.textContent = "URL (https://...)";
+    elInputCode.placeholder = "例: https://example.com/store";
+  } else {
+    elLblCodeInput.textContent = "自由テキスト・メッセージ";
+    elInputCode.placeholder = "例: お問い合わせ窓口";
+  }
+}
+
+elInputType.addEventListener("change", toggleInputMode);
+
+function addSingleItem() {
+  elErrorMsg.textContent = "";
+  const type = elInputType.value;
+  const val = elInputCode.value.trim();
+  const name = elInputName.value.trim() || "名称未設定";
+
+  if (!val) {
+    elErrorMsg.textContent = "コードまたはURLを入力してください。";
+    return;
+  }
+
+  let finalCode = val;
+  if (type === "jan") {
+    const res = JANEncoder.normalizeAndValidate(val);
+    if (!res.valid) {
+      elErrorMsg.textContent = res.error;
+      return;
+    }
+    finalCode = res.code;
+  }
+
+  items.push({ type, code: finalCode, name });
+  elInputCode.value = "";
+  elInputName.value = "";
+  elInputCode.focus();
+  renderAll();
+}
+
+function addBulkItems() {
+  elErrorMsg.textContent = "";
+  const lines = elBulkInput.value.split(/\r?\n/);
+  let added = 0;
+
+  lines.forEach(line => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    const parts = trimmed.split(/\t|,| {2,}/);
+    const val = parts[0].trim();
+    const name = parts.slice(1).join(" ").trim() || "名称未設定";
+
+    let type = "text";
+    let finalCode = val;
+    if (/^\d{7,13}$/.test(val)) {
+      type = "jan";
+      const res = JANEncoder.normalizeAndValidate(val);
+      if (res.valid) finalCode = res.code;
+    } else if (val.startsWith("http://") || val.startsWith("https://")) {
+      type = "url";
+    }
+
+    items.push({ type, code: finalCode, name });
+    added++;
+  });
+
+  if (added > 0) {
+    elBulkInput.value = "";
+    renderAll();
+  }
+}
+
+function removeItem(index) {
+  items.splice(index, 1);
+  renderAll();
+}
+
+function renderSidebarList() {
+  elItemCount.textContent = items.length;
+  elItemList.innerHTML = "";
+  
+  if (items.length === 0) {
+    elItemList.innerHTML = '<div style="padding: 12px; text-align: center; color: var(--text-sub); font-size: 11px;">アイテムがありません</div>';
+    return;
+  }
+
+  items.forEach((item, idx) => {
+    const row = document.createElement("div");
+    row.className = "item-row";
+    const typeLabel = item.type === "jan" ? "[JAN]" : (item.type === "url" ? "[URL]" : "[QR]");
+    
+    const infoDiv = document.createElement("div");
+    infoDiv.className = "item-info";
+    infoDiv.title = `${item.code} : ${item.name}`;
+    infoDiv.innerHTML = `<span class="item-code">${typeLabel}</span><span>${escapeHtml(item.name)}</span>`;
+    
+    const delBtn = document.createElement("button");
+    delBtn.className = "btn-del";
+    delBtn.textContent = "✕";
+    delBtn.title = "削除";
+    delBtn.addEventListener("click", () => removeItem(idx));
+
+    row.appendChild(infoDiv);
+    row.appendChild(delBtn);
+    elItemList.appendChild(row);
+  });
+}
+
+function renderA4Pages() {
+  elPreviewArea.innerHTML = "";
+  const cols = parseInt(optCols.value, 10);
+  const border = optBorder.value;
+
+  const rowsPerPage = (cols === 2) ? 7 : (cols === 3 ? 9 : 11);
+  const perPage = cols * rowsPerPage;
+  const totalPages = Math.max(1, Math.ceil(items.length / perPage));
+
+  for (let p = 0; p < totalPages; p++) {
+    const page = document.createElement("div");
+    page.className = `a4-page cols-${cols} ${border === "none" ? "no-border" : ""}`;
+
+    const slice = items.slice(p * perPage, (p + 1) * perPage);
+
+    slice.forEach(item => {
+      const card = document.createElement("div");
+      card.className = "label-card";
+
+      const nameDiv = document.createElement("div");
+      nameDiv.className = "label-name";
+      nameDiv.textContent = item.name;
+      card.appendChild(nameDiv);
+
+      const codesWrap = document.createElement("div");
+      codesWrap.className = "codes-wrap";
+
+      const box = document.createElement("div");
+      box.className = "code-box";
+      const canvas = document.createElement("canvas");
+
+      if (item.type === "jan") {
+        const barH = (cols === 4) ? 36 : (cols === 3 ? 44 : 52);
+        JANEncoder.drawToCanvas(canvas, item.code, 2, barH);
+      } else {
+        const qrScale = (cols === 4) ? 2 : 3;
+        QREncoder.drawToCanvas(canvas, item.code, qrScale);
+        const displayPx = (cols === 4) ? 58 : (cols === 3 ? 72 : 88);
+        canvas.style.width = displayPx + "px";
+        canvas.style.height = displayPx + "px";
+      }
+
+      box.appendChild(canvas);
+      codesWrap.appendChild(box);
+      card.appendChild(codesWrap);
+      page.appendChild(card);
+    });
+
+    elPreviewArea.appendChild(page);
+  }
+}
+
+function renderAll() {
+  renderSidebarList();
+  renderA4Pages();
+}
+
+function escapeHtml(str) {
+  return str.replace(/[&<>"']/g, m => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[m]));
+}
+
+// イベントリスナー
+document.getElementById("btnAdd").addEventListener("click", addSingleItem);
+document.getElementById("btnBulkAdd").addEventListener("click", addBulkItems);
+document.getElementById("btnClearAll").addEventListener("click", () => {
+  if (items.length > 0 && confirm("リストをすべて削除しますか？")) {
+    items = [];
+    renderAll();
+  }
+});
+
+// Enterキーでの素早い連続入力
+elInputCode.addEventListener("keydown", e => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    elInputName.focus();
+  }
+});
+elInputName.addEventListener("keydown", e => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    addSingleItem();
+  }
+});
+
+[optCols, optBorder].forEach(el => el.addEventListener("change", renderA4Pages));
+
+// 初期化
+toggleInputMode();
+renderAll();
+</script>
+</body>
+</html>
